@@ -103,10 +103,24 @@ class GameView(arcade.Window):
         # ███████████████████████ 修改㉜：已经跳了几次（落地后清零）███████████████████████
         self.jump_count = 0
 
+        # ███████████████████████ 修改㊱：计时器，从第1关开始累计（秒），切关不清零 ███████████████████████
+        self.elapsed_time = 0.0
+
         # Load sounds
         self.collect_coin_sound = arcade.load_sound(":resources:sounds/coin1.wav")
         self.jump_sound = arcade.load_sound(":resources:sounds/jump1.wav")
         self.game_over = arcade.load_sound(":resources:sounds/gameover1.wav")
+
+        # ███████████████████████ 修改㉞：背景音乐，循环播放。
+        # 放在 __init__ 里只播一次（setup 每切一关都会执行，放那里会重复叠加播放）。
+        # 路径和 image/、maps/ 一样是相对运行目录的相对路径。
+        # 加载失败（文件不存在、系统解码不了 mp4）时只打印错误，不让游戏崩溃 ███████████████████████
+        self.music_player = None
+        try:
+            background_music = arcade.load_sound("Music/BackgroundMusic.mp4", streaming=True)
+            self.music_player = arcade.play_sound(background_music, volume=0.5, loop=True)
+        except Exception as e:
+            print(f"背景音乐加载失败: {e}")
 
 
     # ███████████████████████ 修改⑰：新增辅助方法，用 try/except 判断 Scene 里是否存在某个图层。
@@ -183,8 +197,9 @@ class GameView(arcade.Window):
         # Set up the GUI Camera
         self.gui_camera = arcade.Camera2D()
 
-        # Keep track of the score
-        self.score = 0
+        # ███████████████████████ 修改㉟：删除了这里原来的无条件 self.score = 0。
+        # 它每次 setup() 都会把分数清零，导致上面的 reset_score 判断完全不起作用，
+        # 分数永远带不到下一关 ███████████████████████
 
         # ███████████████████████ 修改④：删除 player_list / wall_list / background 的手动初始化，
         # wall_list 不再需要（墙体现在完全来自 tile_map 的 Platforms 层）███████████████████████
@@ -299,6 +314,17 @@ class GameView(arcade.Window):
             18,
         )
 
+        # ███████████████████████ 修改㊱：显示计时器（分:秒.十分之一秒），所有关卡都显示 ███████████████████████
+        minutes = int(self.elapsed_time // 60)
+        seconds = self.elapsed_time % 60
+        arcade.draw_text(
+            f"Time: {minutes:02d}:{seconds:04.1f}",
+            10,
+            650,
+            arcade.csscolor.WHITE,
+            18,
+        )
+
     def on_key_press(self, key, modifiers):
 
         if key == arcade.key.UP or key == arcade.key.W or key == arcade.key.SPACE:
@@ -350,6 +376,10 @@ class GameView(arcade.Window):
         # ███████████████████████ 修改㉜：落地后清零跳跃次数 ███████████████████████
         if self.physics_engine.can_jump():
             self.jump_count = 0
+
+        # ███████████████████████ 修改㊱：所有关卡都累计计时（第0关也计），
+        # 第0关结束进入第1关时会清零（见下面关卡结束判定）███████████████████████
+        self.elapsed_time += delta_time
 
         # ███████████████████████ 修改㉓【平滑过渡】：如果正在执行"上台阶"动画，
         # 每帧按进度插值抬升 y 坐标，持续 STEP_UP_DURATION 秒，
@@ -445,8 +475,12 @@ class GameView(arcade.Window):
 
         # 关卡结束判定
         if self.player_sprite.center_x >= self.end_of_map:
+            # ███████████████████████ 修改㉟：积分规则。
+            # 第0关结束（进入第1关）时分数清零；第1关及以后切关不清零，分数一直累计 ███████████████████████
+            self.reset_score = (self.level == 0)
+            if self.level == 0:
+                self.elapsed_time = 0.0  # 修改㊱：进入第1关时计时器清零
             self.level += 1
-            self.reset_score = False
             self.setup()
 
         # 动态更新镜头
