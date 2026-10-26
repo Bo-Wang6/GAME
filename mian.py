@@ -22,6 +22,8 @@ GRID_PIXEL_SIZE = SPRITE_PIXEL_SIZE * TILE_SCALING
 PLAYER_MOVEMENT_SPEED = 5
 GRAVITY = 0.2
 PLAYER_JUMP_SPEED = 20
+# ███████████████████████ 修改㉜：最多连续跳跃次数（2 = 二段跳）███████████████████████
+MAX_JUMPS = 2
 
 # Player starting position
 PLAYER_START_X = 64
@@ -29,10 +31,13 @@ PLAYER_START_Y = 225
 
 # Layer Names from our TileMap
 LAYER_NAME_PLATFORMS = "Platforms"
-LAYER_NAME_COINS = "Coins"
+LAYER_NAME_COINS = "Coin"
+# ███████████████████████ 修改㉝：宝箱图层名（Tiled 里的图层必须叫 Chest）和每个宝箱的分数 ███████████████████████
+LAYER_NAME_CHEST = "Chest"
+CHEST_SCORE = 5
 LAYER_NAME_FOREGROUND = "Foreground"
 LAYER_NAME_BACKGROUND = "Background"
-LAYER_NAME_DONT_TOUCH = "Don't Touch"
+LAYER_NAME_DONT_TOUCH = "Non-contactable region"
 
 
 class GameView(arcade.Window):
@@ -80,7 +85,8 @@ class GameView(arcade.Window):
         self.end_of_map = 0
 
         # Level
-        self.level = 1
+        # ███████████████████████ 修改㉛：新增第0关，游戏从 map2_level_0.tmx 开始 ███████████████████████
+        self.level = 0
 
         # Do we need to reset the score?
         self.reset_score = True
@@ -93,6 +99,9 @@ class GameView(arcade.Window):
         self.step_up_progress = None
         self.step_up_start_y = 0
         self.step_up_target_y = 0
+
+        # ███████████████████████ 修改㉜：已经跳了几次（落地后清零）███████████████████████
+        self.jump_count = 0
 
         # Load sounds
         self.collect_coin_sound = arcade.load_sound(":resources:sounds/coin1.wav")
@@ -118,13 +127,10 @@ class GameView(arcade.Window):
         self.camera = arcade.Camera2D()
 
        # Map name
-        # ███████████████████████ 修改⑬：第1、2关用 arcade 内置地图(json)，
-        # 第3关及以后用本地自制地图(tmx)，因为本地只有 map2_level_3.tmx，
-        # 没有 level_1/level_2 的本地文件，如果全部改成本地路径会导致1、2关找不到文件 ███████████████████████
-        if self.level <= 2:
-            map_name = f":resources:tiled_maps/map2_level_{self.level}.json"
-        else:
-            map_name = f"maps/map2_level_{self.level}.tmx"
+        # ███████████████████████ 修改㉙：删除官方内置关卡(json)的判断，
+        # 现在第1、2关也换成了自己做的本地 tmx 地图（maps/map2_level_1.tmx、map2_level_2.tmx），
+        # 所有关卡统一从本地 maps 文件夹加载 ███████████████████████
+        map_name = f"maps/map2_level_{self.level}.tmx"
 
         # Layer Specific Options for the Tilemap
         layer_options = {
@@ -132,6 +138,9 @@ class GameView(arcade.Window):
                 "use_spatial_hash": True,
             },
             LAYER_NAME_COINS: {
+                "use_spatial_hash": True,
+            },
+            LAYER_NAME_CHEST: {
                 "use_spatial_hash": True,
             },
             LAYER_NAME_DONT_TOUCH: {
@@ -153,46 +162,23 @@ class GameView(arcade.Window):
             self.score = 0
         self.reset_score = True
 
-        # Calculate the right edge of the my_map in pixels
-        self.end_of_map = self.tile_map.width * GRID_PIXEL_SIZE
+        # ███████████████████████ 修改㉚【核心修复】：GRID_PIXEL_SIZE 是按 SPRITE_PIXEL_SIZE=128
+        # 写死算出来的（那是给 arcade 内置 128px 素材用的假设）。
+        # 你自己做的地图 tile 实际是 32×32 像素，用 GRID_PIXEL_SIZE 算出来的 end_of_map
+        # 会比地图真实宽度大好几倍，导致玩家永远走不到触发下一关的位置。
+        # 改成用 self.tile_map.tile_width（地图文件里真实的 tile 像素宽度）来算，
+        # 这样不管以后地图用多大的 tile 都能正确算出地图右边缘 ███████████████████████
+        self.end_of_map = self.tile_map.width * self.tile_map.tile_width * TILE_SCALING
 
         # ███████████████████████ 修改③【核心问题】：删除了 self.scene = arcade.Scene()
         # 原代码在这里用一个空场景把上面刚加载好的 tilemap 场景整个覆盖掉了，
         # 导致真正的关卡地图从未被绘制，这就是"第二关变空白"的根本原因。███████████████████████
 
-        # ███████████████████████ 修改⑯：自制的第3关地图目前只有 Wall(→Platforms) 和 Non-interactive items 两层，
-        # 没有 Coins / Don't Touch / Background / Foreground 素材。
-        # 这里在缺失这些图层时，用纯色方块自动生成一些测试内容，方便先跑通游戏逻辑。
-        # 以后有真实素材、在 Tiled 里做好这几层后，这段测试代码可以整体删除。███████████████████████
-        if not self._scene_has_layer(LAYER_NAME_COINS):
-            test_coins = arcade.SpriteList()
-            for x in range(300, int(self.end_of_map) - 100, 300):
-                coin = arcade.SpriteSolidColor(20, 20, color=arcade.color.GOLD)
-                coin.center_x = x
-                coin.center_y = 150
-                test_coins.append(coin)
-            self.scene.add_sprite_list(LAYER_NAME_COINS, sprite_list=test_coins)
-
-        if not self._scene_has_layer(LAYER_NAME_DONT_TOUCH):
-            test_danger = arcade.SpriteList()
-            for x in (600, 1200):
-                danger = arcade.SpriteSolidColor(40, 20, color=arcade.color.RED)
-                danger.center_x = x
-                danger.center_y = 40
-                test_danger.append(danger)
-            self.scene.add_sprite_list(LAYER_NAME_DONT_TOUCH, sprite_list=test_danger)
-
-        # ███████████████████████ 修改⑱：移除了 Background 测试色块（原来是浅蓝色矩形），
-        # 第3关不再自动生成这个测试背景 ███████████████████████
-
-        if not self._scene_has_layer(LAYER_NAME_FOREGROUND):
-            test_fg = arcade.SpriteList()
-            for x in range(400, int(self.end_of_map) - 100, 500):
-                deco = arcade.SpriteSolidColor(15, 60, color=arcade.color.DARK_GREEN)
-                deco.center_x = x
-                deco.center_y = 300
-                test_fg.append(deco)
-            self.scene.add_sprite_list(LAYER_NAME_FOREGROUND, sprite_list=test_fg)
+        # ███████████████████████ 修改㉖：删除了所有测试用的纯色色块生成代码
+        # （原修改⑯里的测试金币、测试危险区、测试前景装饰）。
+        # 现在 Coin / Steps / Non-interactive items / Platforms 已经是 Tiled 里做好的真实图层，
+        # 不再需要占位测试内容。如果地图里还没有 Don't Touch / Foreground 这两个真实图层，
+        # 相关功能会自动跳过（不会报错），等 Tiled 里补上对应图层后自动生效 ███████████████████████
 
         # Set up the GUI Camera
         self.gui_camera = arcade.Camera2D()
@@ -210,9 +196,13 @@ class GameView(arcade.Window):
         # Setting before using scene.add_sprite allows us to define where the SpriteList
         # will be in the draw order. If we just use add_sprite, it will be appended to the
         # end of the order.
-        # ███████████████████████ 修改⑭：现在 Foreground 图层要么来自 tile_map（第1、2关），
-        # 要么由修改⑯自动生成（第3关及以后），所以这里始终能找到该图层了 ███████████████████████
-        self.scene.add_sprite_list_after("Player", LAYER_NAME_FOREGROUND)
+        # ███████████████████████ 修改⑭（恢复）：Foreground 图层不再保证一定存在
+        # （之前是靠修改⑯的测试代码兜底生成，现已删除），改回先判断是否存在，
+        # 不存在就用普通的 add_sprite_list，避免地图没有 Foreground 层时报 KeyError ███████████████████████
+        if self._scene_has_layer(LAYER_NAME_FOREGROUND):
+            self.scene.add_sprite_list_after("Player", LAYER_NAME_FOREGROUND)
+        else:
+            self.scene.add_sprite_list("Player")
 
         # Set up the player, specifically placing it at these coordinates.
         image_path = "image/Player.png"
@@ -252,9 +242,14 @@ class GameView(arcade.Window):
         else:
             self.step_sprites = arcade.SpriteList()
 
+        # ███████████████████████ 修改㉚（配套）：自动上台阶的抬升高度也改用地图真实 tile 高度，
+        # 不再用写死的 GRID_PIXEL_SIZE（那是按 128px 假设算的，你的地图实际是 32px 一格）███████████████████████
+        self.step_height = self.tile_map.tile_height * TILE_SCALING
+
         self.physics_engine = arcade.PhysicsEnginePlatformer(
             self.player_sprite, gravity_constant=GRAVITY, walls=wall_sprites
         )
+        self.jump_count = 0  # 修改㉜：切换关卡/重开时清零跳跃次数
 
         # ███████████████████████ 修改⑦：删除手动创建地面 wall 的 for 循环（硬编码坐标，与真实地图无关，
         # 且原代码这段循环写法本身有 bug：Sprite 第二个位置参数应为 scale 关键字，这里传成了裸的 TILE_SCALING）███████████████████████
@@ -307,10 +302,16 @@ class GameView(arcade.Window):
     def on_key_press(self, key, modifiers):
 
         if key == arcade.key.UP or key == arcade.key.W or key == arcade.key.SPACE:
+            # ███████████████████████ 修改㉜：二段跳。
+            # 在地面上时先把跳跃次数清零；之后只要已跳次数 < MAX_JUMPS 就允许再跳一次。
+            # 原代码第二行 change_y = 2 * PLAYER_MOVEMENT_SPEED 不在 if 里面，
+            # 会无条件覆盖跳跃速度，空中可以无限连跳，所以整段重写 ███████████████████████
             if self.physics_engine.can_jump():
-                self.player_sprite.change_y = PLAYER_JUMP_SPEED
-            self.player_sprite.change_y = 2 * PLAYER_MOVEMENT_SPEED
-            arcade.play_sound(self.jump_sound)
+                self.jump_count = 0
+            if self.jump_count < MAX_JUMPS:
+                self.player_sprite.change_y = 2 * PLAYER_MOVEMENT_SPEED
+                self.jump_count += 1
+                arcade.play_sound(self.jump_sound)
         elif key == arcade.key.LEFT or key == arcade.key.A:
             if modifiers & arcade.key.MOD_SHIFT:
                 self.player_sprite.change_x = -2 * PLAYER_MOVEMENT_SPEED
@@ -346,10 +347,14 @@ class GameView(arcade.Window):
         """Movement and game logic"""
         self.physics_engine.update()
 
+        # ███████████████████████ 修改㉜：落地后清零跳跃次数 ███████████████████████
+        if self.physics_engine.can_jump():
+            self.jump_count = 0
+
         # ███████████████████████ 修改㉓【平滑过渡】：如果正在执行"上台阶"动画，
         # 每帧按进度插值抬升 y 坐标，持续 STEP_UP_DURATION 秒，
         # 覆盖掉物理引擎这一帧算出的重力下坠效果，让抬升过程平滑而不是一帧瞬移 ███████████████████████
-        STEP_UP_DURATION = 0.4  # 完成一次上台阶动画所需时间（秒）
+        STEP_UP_DURATION = 0.1  # 完成一次上台阶动画所需时间（秒）
         if self.step_up_progress is not None:
             self.step_up_progress += delta_time / STEP_UP_DURATION
             if self.step_up_progress >= 1:
@@ -369,7 +374,7 @@ class GameView(arcade.Window):
         # ███████████████████████ 修改㉕：探测"前方是否需要自动上台阶"时只检测 self.step_sprites
         # （即 Steps 图层），Platforms 和箱子不再触发自动上台阶，走到跟前会正常撞停、需要跳。
         # 确认可以抬升后，仍然用完整的 self.wall_sprites 验证抬升后的位置不会撞进其他墙体 ███████████████████████
-        STEP_HEIGHT = GRID_PIXEL_SIZE  # 一格 tile 的高度
+        STEP_HEIGHT = self.step_height  # 一格 tile 的高度（按地图真实 tile 尺寸算）
         STEP_PROBE_DISTANCE = 4  # 往前方探测的距离（像素）
         if (
             self.step_up_progress is None
@@ -404,7 +409,21 @@ class GameView(arcade.Window):
             # 如果当前地图没有 Coins 图层，直接跳过，不报错
             pass
 
-        # . 致命危险层检测（即使地图里没有 Don't Touch 也绝不崩溃）
+        # ███████████████████████ 修改㉝：吃宝箱，一个宝箱 = 5 分，碰到后像金币一样消失。
+        # 同样用 try/except 保护，没有 Chest 图层的关卡直接跳过 ███████████████████████
+        try:
+            chest_hit_list = arcade.check_for_collision_with_list(
+                self.player_sprite, self.scene[LAYER_NAME_CHEST]
+            )
+            for chest in chest_hit_list:
+                chest.remove_from_sprite_lists()
+                arcade.play_sound(self.collect_coin_sound)
+                self.score += CHEST_SCORE
+        except Exception:
+            pass
+
+        # ███████████████████████ 修改㉘：调试完成，恢复 try/except 保护。
+        # 避免以后其他关卡地图没有这个危险区图层时直接报错崩溃 ███████████████████████
         try:
             if arcade.check_for_collision_with_list(
                 self.player_sprite, self.scene[LAYER_NAME_DONT_TOUCH]
@@ -415,7 +434,7 @@ class GameView(arcade.Window):
                 self.player_sprite.center_y = PLAYER_START_Y
                 arcade.play_sound(self.game_over)
         except Exception:
-            # 如果当前地图没有 Don't Touch 图层，直接跳过，不报错
+            # 如果当前地图没有这个危险区图层，直接跳过，不报错
             pass
 
         # 掉出地图边界重置
