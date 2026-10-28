@@ -35,6 +35,12 @@ LAYER_NAME_COINS = "Coin"
 # ███████████████████████ 修改㉝：宝箱图层名（Tiled 里的图层必须叫 Chest）和每个宝箱的分数 ███████████████████████
 LAYER_NAME_CHEST = "Chest"
 CHEST_SCORE = 5
+# ███████████████████████ 修改㊲：生命机制相关常量 ███████████████████████
+LAYER_NAME_HEART = "Heart"  # 回血物品图层名（Tiled 里必须叫 Heart）
+MAX_LIVES = 3               # 初始生命数，同时也是生命上限
+HEART_HEAL = 1              # 每个 Heart 回复几条命
+LIFE_ICON_SIZE = 32         # 生命图标显示大小（像素）
+LIFE_ICON_SPACING = 40      # 生命图标之间的间距（像素）
 LAYER_NAME_FOREGROUND = "Foreground"
 LAYER_NAME_BACKGROUND = "Background"
 LAYER_NAME_DONT_TOUCH = "Non-contactable region"
@@ -106,6 +112,10 @@ class GameView(arcade.Window):
         # ███████████████████████ 修改㊱：计时器，从第1关开始累计（秒），切关不清零 ███████████████████████
         self.elapsed_time = 0.0
 
+        # ███████████████████████ 修改㊲：当前生命数和生命图标（image/Life.png）███████████████████████
+        self.lives = MAX_LIVES
+        self.life_texture = arcade.load_texture("image/Life.png")
+
         # Load sounds
         self.collect_coin_sound = arcade.load_sound(":resources:sounds/coin1.wav")
         self.jump_sound = arcade.load_sound(":resources:sounds/jump1.wav")
@@ -155,6 +165,9 @@ class GameView(arcade.Window):
                 "use_spatial_hash": True,
             },
             LAYER_NAME_CHEST: {
+                "use_spatial_hash": True,
+            },
+            LAYER_NAME_HEART: {
                 "use_spatial_hash": True,
             },
             LAYER_NAME_DONT_TOUCH: {
@@ -325,6 +338,18 @@ class GameView(arcade.Window):
             18,
         )
 
+        # ███████████████████████ 修改㊲：右上角按当前生命数画生命图标 ███████████████████████
+        for i in range(self.lives):
+            arcade.draw_texture_rect(
+                texture=self.life_texture,
+                rect=arcade.XYWH(
+                    self.width - 30 - i * LIFE_ICON_SPACING,
+                    690,
+                    LIFE_ICON_SIZE,
+                    LIFE_ICON_SIZE,
+                ),
+            )
+
     def on_key_press(self, key, modifiers):
 
         if key == arcade.key.UP or key == arcade.key.W or key == arcade.key.SPACE:
@@ -368,6 +393,30 @@ class GameView(arcade.Window):
             target_y = WINDOW_HEIGHT / 2
 
         self.camera.position = (target_x, target_y)
+
+    # ███████████████████████ 修改㊲：扣命。碰到危险区、掉出地图都会调用。
+    # 生命还有剩余：送回起点继续；生命扣到 0：整个游戏重来（回第1关，分数清零）███████████████████████
+    def lose_life(self):
+        self.lives -= 1
+        arcade.play_sound(self.game_over)
+        if self.lives <= 0:
+            self.restart_game()
+            return
+        self.player_sprite.change_x = 0
+        self.player_sprite.change_y = 0
+        self.player_sprite.center_x = PLAYER_START_X
+        self.player_sprite.center_y = PLAYER_START_Y
+        self.step_up_progress = None
+        self.jump_count = 0
+
+    def restart_game(self):
+        """生命用完：回第1关，生命回满，分数清零。
+        修改㊴：计时器不再清零，时间继续累计保留"""
+        self.level = 1
+        self.lives = MAX_LIVES
+        self.score = 0
+        self.reset_score = True
+        self.setup()
 
     def on_update(self, delta_time):
         """Movement and game logic"""
@@ -452,26 +501,39 @@ class GameView(arcade.Window):
         except Exception:
             pass
 
-        # ███████████████████████ 修改㉘：调试完成，恢复 try/except 保护。
-        # 避免以后其他关卡地图没有这个危险区图层时直接报错崩溃 ███████████████████████
+        # ███████████████████████ 修改㊲：吃回血物品 Heart，每个回 HEART_HEAL 条命，不超过 MAX_LIVES，
+        # 碰到后消失。没有 Heart 图层的关卡直接跳过 ███████████████████████
         try:
-            if arcade.check_for_collision_with_list(
-                self.player_sprite, self.scene[LAYER_NAME_DONT_TOUCH]
-            ):
-                self.player_sprite.change_x = 0
-                self.player_sprite.change_y = 0
-                self.player_sprite.center_x = PLAYER_START_X
-                self.player_sprite.center_y = PLAYER_START_Y
-                arcade.play_sound(self.game_over)
+            heart_hit_list = arcade.check_for_collision_with_list(
+                self.player_sprite, self.scene[LAYER_NAME_HEART]
+            )
+            for heart in heart_hit_list:
+                heart.remove_from_sprite_lists()
+                arcade.play_sound(self.collect_coin_sound)
+                # ███████████████████████ 修改㊳：生命已满时吃 Heart 也会消失，但改为加 1 分 ███████████████████████
+                if self.lives >= MAX_LIVES:
+                    self.score += 1
+                else:
+                    self.lives = min(MAX_LIVES, self.lives + HEART_HEAL)
         except Exception:
-            # 如果当前地图没有这个危险区图层，直接跳过，不报错
             pass
 
-        # 掉出地图边界重置
+        # ███████████████████████ 修改㊲（替代原修改㉘）：碰到危险区扣 1 条命。
+        # try/except 只包住"检测是否碰到"，没有这个图层的关卡直接当作没碰到；
+        # 扣命逻辑放在 try 外面，避免 lose_life()/setup() 里的真实报错被吞掉 ███████████████████████
+        hit_hazard = False
+        try:
+            hit_hazard = bool(arcade.check_for_collision_with_list(
+                self.player_sprite, self.scene[LAYER_NAME_DONT_TOUCH]
+            ))
+        except Exception:
+            pass
+        if hit_hazard:
+            self.lose_life()
+
+        # ███████████████████████ 修改㊲：掉出地图扣 1 条命 ███████████████████████
         if self.player_sprite.center_y < -100:
-            self.player_sprite.center_x = PLAYER_START_X
-            self.player_sprite.center_y = PLAYER_START_Y
-            arcade.play_sound(self.game_over)
+            self.lose_life()
 
         # 关卡结束判定
         if self.player_sprite.center_x >= self.end_of_map:

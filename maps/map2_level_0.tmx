@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.12.2" orientation="orthogonal" renderorder="right-down" width="200" height="46" tilewidth="32" tileheight="32" infinite="0" nextlayerid="8" nextobjectid="3">
+<map version="1.10" tiledversion="1.12.2" orientation="orthogonal" renderorder="right-down" width="200" height="46" tilewidth="32" tileheight="32" infinite="0" nextlayerid="9" nextobjectid="4">
  <tileset firstgid="1" source="wall.tsx"/>
  <tileset firstgid="1477" source="Teach block-1.tsx"/>
  <tileset firstgid="1617" source="Rock-Cube.tsx"/>
@@ -15,6 +15,7 @@
  <tileset firstgid="2116" source="Teach block-5.tsx"/>
  <tileset firstgid="2264" source="Rock-Small-Cube-Dark.tsx"/>
  <tileset firstgid="2265" source="Rock-Small-Cube-Dark*4.tsx"/>
+ <tileset firstgid="2269" source="Heart.tsx"/>
  <layer id="1" name="Platforms" width="200" height="46">
   <data encoding="csv">
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
@@ -265,6 +266,9 @@
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 </data>
  </layer>
+ <objectgroup id="8" name="Heart">
+  <object id="3" gid="2269" x="5838.17" y="590" width="32" height="29"/>
+ </objectgroup>
  <objectgroup id="7" name="Coin">
   <object id="1" gid="1645" x="4324.76" y="1277.95" width="64" height="64"/>
  </objectgroup>
