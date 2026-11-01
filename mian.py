@@ -41,6 +41,14 @@ MAX_LIVES = 3               # 初始生命数，同时也是生命上限
 HEART_HEAL = 1              # 每个 Heart 回复几条命
 LIFE_ICON_SIZE = 32         # 生命图标显示大小（像素）
 LIFE_ICON_SPACING = 40      # 生命图标之间的间距（像素）
+# ███████████████████████ 修改㊵：通关页面相关常量 ███████████████████████
+FINAL_LEVEL = 3             # 最后一关，走完它出现通关页面（修改㊷：由第4关改为第3关）
+STAR3_SCORE = 140           # 分数 >= 140 → 3 星
+STAR2_SCORE = 70            # 分数 70~139 → 2 星，0~69 → 1 星
+STAR3_TIME = 300            # 用时 <= 300 秒 → 3 星
+STAR2_TIME = 400            # 用时 301~400 秒 → 2 星，400 秒以上 → 1 星
+STAR_SIZE = 96              # 通关页面星星大小（像素）
+STAR_SPACING = 130          # 通关页面星星中心间距（像素）
 LAYER_NAME_FOREGROUND = "Foreground"
 LAYER_NAME_BACKGROUND = "Background"
 LAYER_NAME_DONT_TOUCH = "Non-contactable region"
@@ -115,6 +123,14 @@ class GameView(arcade.Window):
         # ███████████████████████ 修改㊲：当前生命数和生命图标（image/Life.png）███████████████████████
         self.lives = MAX_LIVES
         self.life_texture = arcade.load_texture("image/Life.png")
+
+        # ███████████████████████ 修改㊵：通关页面的图片、状态 ███████████████████████
+        self.star_texture = arcade.load_texture("image/star.png")
+        # ███████████████████████ 修改㊶：没获得的星星用单独的图片 star-dark.png ███████████████████████
+        self.star_dark_texture = arcade.load_texture("image/star-dark.png")
+        self.end_background = arcade.load_texture("image/background-end.png")
+        self.game_cleared = False   # True 时显示通关页面，游戏逻辑暂停
+        self.clear_stars = 0        # 通关时得到的星数（1~3）
 
         # Load sounds
         self.collect_coin_sound = arcade.load_sound(":resources:sounds/coin1.wav")
@@ -295,6 +311,11 @@ class GameView(arcade.Window):
         # 每次最先清空屏幕
         self.clear()
 
+        # ███████████████████████ 修改㊵：通关后只画通关页面 ███████████████████████
+        if self.game_cleared:
+            self.draw_clear_screen()
+            return
+
         # ==================== 1. 最底层：画固定不动的背景 ====================
         # ███████████████████████ 修改⑫【方案A】：背景改用 gui_camera 绘制，
         # gui_camera 不随玩家移动而滚动，所以背景图会一直铺满整个窗口，
@@ -352,6 +373,12 @@ class GameView(arcade.Window):
 
     def on_key_press(self, key, modifiers):
 
+        # ███████████████████████ 修改㊵：通关页面只响应空格（回第1关），其他按键忽略 ███████████████████████
+        if self.game_cleared:
+            if key == arcade.key.SPACE:
+                self.restart_from_clear()
+            return
+
         if key == arcade.key.UP or key == arcade.key.W or key == arcade.key.SPACE:
             # ███████████████████████ 修改㉜：二段跳。
             # 在地面上时先把跳跃次数清零；之后只要已跳次数 < MAX_JUMPS 就允许再跳一次。
@@ -365,12 +392,12 @@ class GameView(arcade.Window):
                 arcade.play_sound(self.jump_sound)
         elif key == arcade.key.LEFT or key == arcade.key.A:
             if modifiers & arcade.key.MOD_SHIFT:
-                self.player_sprite.change_x = -2 * PLAYER_MOVEMENT_SPEED
+                self.player_sprite.change_x = -1.5 * PLAYER_MOVEMENT_SPEED
             else:
                 self.player_sprite.change_x = -PLAYER_MOVEMENT_SPEED
         elif key == arcade.key.RIGHT or key == arcade.key.D:
             if modifiers & arcade.key.MOD_SHIFT:
-                self.player_sprite.change_x = 2 * PLAYER_MOVEMENT_SPEED
+                self.player_sprite.change_x = 1.5 * PLAYER_MOVEMENT_SPEED
             else:
                 self.player_sprite.change_x = PLAYER_MOVEMENT_SPEED
         
@@ -418,8 +445,81 @@ class GameView(arcade.Window):
         self.reset_score = True
         self.setup()
 
+    # ███████████████████████ 修改㊵：通关页面 ███████████████████████
+    def calc_stars(self):
+        """分数星级和时间星级各算一个，取较低的（两项都达标才拿高星）"""
+        if self.score >= STAR3_SCORE:
+            score_stars = 3
+        elif self.score >= STAR2_SCORE:
+            score_stars = 2
+        else:
+            score_stars = 1
+
+        if self.elapsed_time <= STAR3_TIME:
+            time_stars = 3
+        elif self.elapsed_time <= STAR2_TIME:
+            time_stars = 2
+        else:
+            time_stars = 1
+
+        return min(score_stars, time_stars)
+
+    def show_clear_screen(self):
+        """走完最后一关：算星级，进入通关页面（计时停止）"""
+        self.clear_stars = self.calc_stars()
+        self.player_sprite.change_x = 0
+        self.player_sprite.change_y = 0
+        self.game_cleared = True
+
+    def restart_from_clear(self):
+        """通关页面按空格：回第1关，生命回满，分数和计时清零，重新开始一局"""
+        self.game_cleared = False
+        self.level = 1
+        self.lives = MAX_LIVES
+        self.score = 0
+        self.reset_score = True
+        self.elapsed_time = 0.0
+        self.setup()
+
+    def draw_clear_screen(self):
+        self.gui_camera.use()
+        cx = self.width / 2
+        cy = self.height / 2
+
+        # 通关背景，铺满窗口
+        arcade.draw_texture_rect(
+            texture=self.end_background,
+            rect=arcade.XYWH(cx, cy, self.width, self.height),
+        )
+
+        # 修改㊸：去掉了通关页面顶部的 "LEVEL CLEAR" 标题文字
+
+        # 星星放在正中间：3 个位置，获得的用 star.png，没获得的用 star-dark.png
+        # （修改㊶：不再用透明度变暗，改成直接换图片）
+        for i in range(3):
+            star_x = cx + (i - 1) * STAR_SPACING
+            star_texture = self.star_texture if i < self.clear_stars else self.star_dark_texture
+            arcade.draw_texture_rect(
+                texture=star_texture,
+                rect=arcade.XYWH(star_x, cy, STAR_SIZE, STAR_SIZE),
+            )
+
+        # 星星下面显示分数和用时
+        minutes = int(self.elapsed_time // 60)
+        seconds = self.elapsed_time % 60
+        arcade.draw_text(
+            f"Score: {self.score}    Time: {minutes:02d}:{seconds:04.1f}",
+            cx, cy - 110, arcade.csscolor.WHITE, 24,
+            anchor_x="center",
+        )
+        # 修改㊹：去掉了 "Press SPACE to restart" 提示文字，按空格重新开始的功能保留
+
     def on_update(self, delta_time):
         """Movement and game logic"""
+        # ███████████████████████ 修改㊵：通关页面期间暂停所有游戏逻辑（计时也停）███████████████████████
+        if self.game_cleared:
+            return
+
         self.physics_engine.update()
 
         # ███████████████████████ 修改㉜：落地后清零跳跃次数 ███████████████████████
@@ -536,7 +636,10 @@ class GameView(arcade.Window):
             self.lose_life()
 
         # 关卡结束判定
-        if self.player_sprite.center_x >= self.end_of_map:
+        # ███████████████████████ 修改㊵：走完最后一关（FINAL_LEVEL）出现通关页面，不再进入下一关 ███████████████████████
+        if self.player_sprite.center_x >= self.end_of_map and self.level >= FINAL_LEVEL:
+            self.show_clear_screen()
+        elif self.player_sprite.center_x >= self.end_of_map:
             # ███████████████████████ 修改㉟：积分规则。
             # 第0关结束（进入第1关）时分数清零；第1关及以后切关不清零，分数一直累计 ███████████████████████
             self.reset_score = (self.level == 0)
