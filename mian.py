@@ -22,7 +22,7 @@ GRID_PIXEL_SIZE = SPRITE_PIXEL_SIZE * TILE_SCALING
 PLAYER_MOVEMENT_SPEED = 5
 GRAVITY = 0.2
 PLAYER_JUMP_SPEED = 20
-# ███████████████████████ 修改㉜：最多连续跳跃次数（2 = 二段跳）███████████████████████
+# The maximum number of consecutive jumps/最多连续跳跃次数 2
 MAX_JUMPS = 2
 
 # Player starting position
@@ -32,7 +32,6 @@ PLAYER_START_Y = 225
 # Layer Names from our TileMap
 LAYER_NAME_PLATFORMS = "Platforms"
 LAYER_NAME_COINS = "Coin"
-# ███████████████████████ 修改㉝：宝箱图层名（Tiled 里的图层必须叫 Chest）和每个宝箱的分数 ███████████████████████
 LAYER_NAME_CHEST = "Chest"
 CHEST_SCORE = 5
 # ███████████████████████ 修改㊲：生命机制相关常量 ███████████████████████
@@ -191,8 +190,6 @@ class GameView(arcade.Window):
             },
         }
 
-        # ███████████████████████ 修改②：删除了重复的 layer_options 覆盖赋值（原代码这里又定义了一次只含 Platforms 的 layer_options，把上面完整的配置覆盖掉了） ███████████████████████
-
         # Read in the tiled map
         self.tile_map = arcade.load_tilemap(map_name, TILE_SCALING, layer_options)
 
@@ -205,33 +202,11 @@ class GameView(arcade.Window):
             self.score = 0
         self.reset_score = True
 
-        # ███████████████████████ 修改㉚【核心修复】：GRID_PIXEL_SIZE 是按 SPRITE_PIXEL_SIZE=128
-        # 写死算出来的（那是给 arcade 内置 128px 素材用的假设）。
-        # 你自己做的地图 tile 实际是 32×32 像素，用 GRID_PIXEL_SIZE 算出来的 end_of_map
-        # 会比地图真实宽度大好几倍，导致玩家永远走不到触发下一关的位置。
-        # 改成用 self.tile_map.tile_width（地图文件里真实的 tile 像素宽度）来算，
-        # 这样不管以后地图用多大的 tile 都能正确算出地图右边缘 ███████████████████████
         self.end_of_map = self.tile_map.width * self.tile_map.tile_width * TILE_SCALING
-
-        # ███████████████████████ 修改③【核心问题】：删除了 self.scene = arcade.Scene()
-        # 原代码在这里用一个空场景把上面刚加载好的 tilemap 场景整个覆盖掉了，
-        # 导致真正的关卡地图从未被绘制，这就是"第二关变空白"的根本原因。███████████████████████
-
-        # ███████████████████████ 修改㉖：删除了所有测试用的纯色色块生成代码
-        # （原修改⑯里的测试金币、测试危险区、测试前景装饰）。
-        # 现在 Coin / Steps / Non-interactive items / Platforms 已经是 Tiled 里做好的真实图层，
-        # 不再需要占位测试内容。如果地图里还没有 Don't Touch / Foreground 这两个真实图层，
-        # 相关功能会自动跳过（不会报错），等 Tiled 里补上对应图层后自动生效 ███████████████████████
 
         # Set up the GUI Camera
         self.gui_camera = arcade.Camera2D()
 
-        # ███████████████████████ 修改㉟：删除了这里原来的无条件 self.score = 0。
-        # 它每次 setup() 都会把分数清零，导致上面的 reset_score 判断完全不起作用，
-        # 分数永远带不到下一关 ███████████████████████
-
-        # ███████████████████████ 修改④：删除 player_list / wall_list / background 的手动初始化，
-        # wall_list 不再需要（墙体现在完全来自 tile_map 的 Platforms 层）███████████████████████
         self.background = arcade.load_texture("image/background.png")
 
 
@@ -240,9 +215,7 @@ class GameView(arcade.Window):
         # Setting before using scene.add_sprite allows us to define where the SpriteList
         # will be in the draw order. If we just use add_sprite, it will be appended to the
         # end of the order.
-        # ███████████████████████ 修改⑭（恢复）：Foreground 图层不再保证一定存在
-        # （之前是靠修改⑯的测试代码兜底生成，现已删除），改回先判断是否存在，
-        # 不存在就用普通的 add_sprite_list，避免地图没有 Foreground 层时报 KeyError ███████████████████████
+
         if self._scene_has_layer(LAYER_NAME_FOREGROUND):
             self.scene.add_sprite_list_after("Player", LAYER_NAME_FOREGROUND)
         else:
@@ -260,11 +233,6 @@ class GameView(arcade.Window):
         if self.tile_map.background_color:
             arcade.set_background_color(self.tile_map.background_color)
 
-        # ███████████████████████ 修改⑲：箱子层改名为 "Non-interactive items"（对应 Tiled 里改的新名字），
-        # 仍然并入碰撞判定，玩家可以站上去。内置的第1、2关地图没有这个层，
-        # 所以先判断该图层是否存在，存在才合并，避免第1、2关报错 ███████████████████████
-        # ███████████████████████ 修改㉔：新增 Steps 图层（台阶）也并入碰撞判定，
-        # 否则台阶层完全没有碰撞、玩家站上去等于踩空气，会出现走不动/卡住的异常表现 ███████████████████████
         wall_sprites = self.scene[LAYER_NAME_PLATFORMS]
         extra_wall_layers = []
         if self._scene_has_layer("Non-interactive items"):
@@ -276,35 +244,20 @@ class GameView(arcade.Window):
             wall_sprites.extend(self.scene[LAYER_NAME_PLATFORMS])
             for layer_name in extra_wall_layers:
                 wall_sprites.extend(self.scene[layer_name])
-        # ███████████████████████ 修改⑳：保存为实例变量，供 on_update 里"自动上台阶"逻辑使用 ███████████████████████
+        # Automatic Step Climbing/自动上台阶
         self.wall_sprites = wall_sprites
 
-        # ███████████████████████ 修改㉕：单独保存 Steps 图层，"自动上台阶"只对这一层生效，
-        # Platforms 和 Non-interactive items（箱子）仍然是普通碰撞，走到跟前会撞停，需要跳 ███████████████████████
         if self._scene_has_layer("Steps"):
             self.step_sprites = self.scene["Steps"]
         else:
             self.step_sprites = arcade.SpriteList()
 
-        # ███████████████████████ 修改㉚（配套）：自动上台阶的抬升高度也改用地图真实 tile 高度，
-        # 不再用写死的 GRID_PIXEL_SIZE（那是按 128px 假设算的，你的地图实际是 32px 一格）███████████████████████
         self.step_height = self.tile_map.tile_height * TILE_SCALING
 
         self.physics_engine = arcade.PhysicsEnginePlatformer(
             self.player_sprite, gravity_constant=GRAVITY, walls=wall_sprites
         )
-        self.jump_count = 0  # 修改㉜：切换关卡/重开时清零跳跃次数
-
-        # ███████████████████████ 修改⑦：删除手动创建地面 wall 的 for 循环（硬编码坐标，与真实地图无关，
-        # 且原代码这段循环写法本身有 bug：Sprite 第二个位置参数应为 scale 关键字，这里传成了裸的 TILE_SCALING）███████████████████████
-
-        # ███████████████████████ 修改⑧：删除手动放置箱子(coordinate_list)的代码，箱子应由 tile_map 提供 ███████████████████████
-
-        # ███████████████████████ 修改⑨：删除手动放置金币的 for 循环，金币应来自 tile_map 的 Coins 层，
-        # 而不是写死在 (128, 1250, 256) 这几个固定坐标上 ███████████████████████
-
-        # ███████████████████████ 修改⑩：删除重复的第二次 PhysicsEnginePlatformer 创建（原代码创建了两次物理引擎，
-        # 第二次同样错误地引用了 wall_list）███████████████████████
+        self.jump_count = 0  # Reset the number of jumps when switching levels or reopening 修改：切换关卡/重开时清零跳跃次数
 
     def on_draw(self):
         """Render the screen."""
