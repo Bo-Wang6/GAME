@@ -376,8 +376,7 @@ class GameView(arcade.Window):
         self.jump_count = 0
 
     def restart_game(self):
-        """生命用完：回第1关，生命回满，分数清零。
-        修改㊴：计时器不再清零，时间继续累计保留"""
+        """Out of lives: back to level 1, lives full, score reset to 0. The timer is not reset, time keeps counting/生命用完：回第1关，生命回满，分数清零；计时器不清零，时间继续累计"""
         self.level = 1
         self.lives = MAX_LIVES
         self.score = 0
@@ -450,7 +449,7 @@ class GameView(arcade.Window):
             cx, cy - 110, arcade.csscolor.WHITE, 24,
             anchor_x="center",
         )
-        # 修改㊹：去掉了 "Press SPACE to restart" 提示文字，按空格重新开始的功能保留
+        # No "Press SPACE to restart" text on this page, but pressing space still restarts/页面上没有"Press SPACE to restart"提示文字，但按空格仍然可以重新开始
 
     def on_update(self, delta_time):
         """Movement and game logic"""
