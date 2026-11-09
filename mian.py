@@ -129,6 +129,10 @@ class GameView(arcade.Window):
         # The dark stars(stars don't got)
         self.star_dark_texture = arcade.load_texture(resource_path("image/star-dark.png"))
         self.end_background = arcade.load_texture(resource_path("image/background-end.png"))
+
+        # The start screen/开始界面（按空格键开始，开始前游戏逻辑和计时都暂停）
+        self.start_background = arcade.load_texture(resource_path("image/background-start.png"))
+        self.game_started = False
         self.game_cleared = False   # if it is True, game ends
         self.clear_stars = 0        # got stars at the ends（1~3）
 
@@ -257,6 +261,11 @@ class GameView(arcade.Window):
         # clear the scren/清空屏幕  
         self.clear()
 
+        # Before the game starts, only draw the start screen/游戏开始前只画开始界面
+        if not self.game_started:
+            self.draw_start_screen()
+            return
+
         # only draw the end background, no player, heart...
         if self.game_cleared:
             self.draw_clear_screen()
@@ -315,6 +324,12 @@ class GameView(arcade.Window):
             )
 
     def on_key_press(self, key, modifiers):
+
+        # On the start screen, press space to start the game (other keys are ignored)/开始界面按空格开始游戏，其他按键忽略
+        if not self.game_started:
+            if key == arcade.key.SPACE:
+                self.game_started = True
+            return
 
         # press space turn level-end to level-1(level-0 is for teaching how to play this game)
         if self.game_cleared:
@@ -419,6 +434,13 @@ class GameView(arcade.Window):
         self.elapsed_time = 0.0
         self.setup()
 
+    def draw_start_screen(self):
+        self.gui_camera.use()
+        arcade.draw_texture_rect(
+            texture=self.start_background,
+            rect=arcade.XYWH(self.width / 2, self.height / 2, self.width, self.height),
+        )
+
     def draw_clear_screen(self):
         self.gui_camera.use()
         cx = self.width / 2
@@ -453,8 +475,8 @@ class GameView(arcade.Window):
 
     def on_update(self, delta_time):
         """Movement and game logic"""
-        # game set
-        if self.game_cleared:
+        # game set / paused on the start screen/通关页面或开始界面期间暂停所有游戏逻辑（计时也停）
+        if self.game_cleared or not self.game_started:
             return
 
         self.physics_engine.update()
